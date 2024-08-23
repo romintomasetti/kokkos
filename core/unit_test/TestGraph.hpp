@@ -314,4 +314,38 @@ TEST_F(TEST_CATEGORY_FIXTURE(graph), zero_work_reduce) {
   ex.fence();
   ASSERT_EQ(count_host(), 0);
 }
+
+// This test shows how we can get closer to std::execution from P2300.
+TEST(TEST_CATEGORY_FIXTURE(graph), p2300)
+{
+  // This would be our scheduler. It is linked to some execution resource (e.g. a GPU).
+  auto graph = Kokkos::Exeperimental::create_graph(exec);
+
+  // Start the chain of senders/receivers that completes on our scheduler.
+  sender auto begin = schedule(sch);
+
+  concepts::node node_A1 = Kokkos::Graph::then(
+      graph,
+      Kokkos::Graph::parallel_for(label, policy, body)
+  );
+  concepts::node node_A2 = Kokkos::Graph::then(
+      graph,
+      Kokkos::Graph::parallel_for(label, policy, body)
+  );
+
+  concepts::node node_B1 = Kokkos::Graph::then(
+      Kokkos::Graph::when_all(node_A1, node_A2),
+      Kokkos::Graph::parallel_for(label, policy, body)
+  );
+  concepts::node node_b2 = Kokkos::Graph::then(
+      node_A2,
+      Kokkos::Graph::parallel_for(label, policy, body)
+  );
+
+  concepts::node node_D = Kokkos::Graph::then(
+      when_all(node_b1, node_b2),
+      Kokkos::Graph::parallel_for(label, policy, body)
+  );
+}
+
 }  // end namespace Test
