@@ -153,6 +153,68 @@ Graph<ExecutionSpace> create_graph(Closure&& arg_closure) {
   return create_graph(ExecutionSpace{}, (Closure&&)arg_closure);
 }
 
+/* Proposal for extending the current API such that things similar to P2300 can be done. */
+namespace graph {
+
+// Cheating structure, see below.
+template <typename Policy, typename Functor, typename ParallelTag>
+struct Transport
+{
+  std::string label;
+  Policy policy;
+  Functor functor;
+};
+
+template <typename T>
+struct is_transport : std::false_type {};
+
+template <typename... U>
+struct is_transport<Transport<U...>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_transport_v = is_transport<T>::value;
+
+// Create a sender from the graph.
+// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p2300r10.html#design-sender-factory-schedule
+template <typename Exec>
+auto schedule(Graph<Exec>& graph) {
+  return Kokkos::Impl::GraphAccess::create_root_ref(graph);
+}
+
+// This might probably map to https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p2300r10.html#design-sender-adaptor-bulk.
+// We need to "transport" the arguments to a later point to allow a transparent reuse of the existing API.
+template <typename Policy, typename Functor>
+auto parallel_for(std::string label, Policy&& policy, Functor&& functor) {
+  return Transport<Policy, Functor, Kokkos::ParallelForTag>{std::move(label), std::forward<Policy>(policy), std::forward<Functor>(functor)};
+}
+
+// Implementation of 'then' for parallel-for tag.
+// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p2300r10.html#design-sender-adaptor-then
+template <typename Sender, template <typename, typename, typename> typename Invocable, typename Policy, typename Functor, typename ParallelTag>
+auto then(Sender&& sender, Invocable<Policy, Functor, ParallelTag>&& function) {
+  static_assert(is_transport_v<Invocable<Policy, Functor, ParallelTag>>);
+  static_assert(std::is_same_v<ParallelTag, Kokkos::ParallelForTag>);
+  return std::forward<Sender>(sender).then_parallel_for(
+    std::move(function.label),
+    std::move(function.policy),
+    std::move(function.functor)
+  );
+}
+
+// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p2300r10.html#design-sender-adaptor-when_all
+template <class... Predecessor>
+auto when_all(Predecessor&&... preds) {
+  return Kokkos::Experimental::when_all(std::forward<Predecessor>(preds)...);
+}
+
+// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p2300r10.html#example-server-on
+template <typename Exec, typename Sender>
+void starts_on(const Exec& /* exec */, Sender&& sender) {
+  Kokkos::Impl::GraphAccess::get_graph_weak_ptr(std::forward<Sender>(sender)).lock()->submit(/* exec */);
+}
+
+} // namespace graph
+
 // </editor-fold> end create_graph }}}1
 //==============================================================================
 

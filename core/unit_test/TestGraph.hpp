@@ -315,37 +315,55 @@ TEST_F(TEST_CATEGORY_FIXTURE(graph), zero_work_reduce) {
   ASSERT_EQ(count_host(), 0);
 }
 
+template <typename view_t>
+struct HelloWorld
+{
+  view_t data;
+  KOKKOS_FUNCTION
+  void operator()(const int index) const { Kokkos::atomic_increment(&data()); }
+};
+
 // This test shows how we can get closer to std::execution from P2300.
-TEST(TEST_CATEGORY_FIXTURE(graph), p2300)
+TEST_F(TEST_CATEGORY_FIXTURE(graph), p2300)
 {
   // This would be our scheduler. It is linked to some execution resource (e.g. a GPU).
-  auto graph = Kokkos::Exeperimental::create_graph(exec);
+  auto graph = Kokkos::Experimental::create_graph(ex, [](const auto){}); // empty closure to be removed once PR #7248 is merged
 
-  // Start the chain of senders/receivers that completes on our scheduler.
-  sender auto begin = schedule(sch);
+  // Start the chain of senders/receivers that completes on our scheduler. Somehow similar to 'get_scheduler'.
+  auto root = Kokkos::Experimental::graph::schedule(graph);
 
-  concepts::node node_A1 = Kokkos::Graph::then(
-      graph,
-      Kokkos::Graph::parallel_for(label, policy, body)
+  const auto policy = Kokkos::RangePolicy<TEST_EXECSPACE>(0, 1);
+
+  // Add nodes.
+  const auto node_A1 = Kokkos::Experimental::graph::then(
+      root,
+      Kokkos::Experimental::graph::parallel_for("node A1", policy, HelloWorld<view_type>{count})
   );
-  concepts::node node_A2 = Kokkos::Graph::then(
-      graph,
-      Kokkos::Graph::parallel_for(label, policy, body)
+  const auto node_A2 = Kokkos::Experimental::graph::then(
+      root,
+      Kokkos::Experimental::graph::parallel_for("node A2", policy, HelloWorld<view_type>{count})
   );
 
-  concepts::node node_B1 = Kokkos::Graph::then(
-      Kokkos::Graph::when_all(node_A1, node_A2),
-      Kokkos::Graph::parallel_for(label, policy, body)
+  const auto node_B1 = Kokkos::Experimental::graph::then(
+      Kokkos::Experimental::graph::when_all(node_A1, node_A2),
+      Kokkos::Experimental::graph::parallel_for("node B1", policy, HelloWorld<view_type>{count})
   );
-  concepts::node node_b2 = Kokkos::Graph::then(
+  const auto node_b2 = Kokkos::Experimental::graph::then(
       node_A2,
-      Kokkos::Graph::parallel_for(label, policy, body)
+      Kokkos::Experimental::graph::parallel_for("node B2", policy, HelloWorld<view_type>{count})
   );
 
-  concepts::node node_D = Kokkos::Graph::then(
-      when_all(node_b1, node_b2),
-      Kokkos::Graph::parallel_for(label, policy, body)
+  const auto node_D = Kokkos::Experimental::graph::then(
+      Kokkos::Experimental::graph::when_all(node_B1, node_b2),
+      Kokkos::Experimental::graph::parallel_for("node D", policy, HelloWorld<view_type>{count})
   );
+
+  // Equivalent to graph.submit().
+  Kokkos::Experimental::graph::starts_on(ex, node_D);
+
+  Kokkos::fence();
+  const auto mirror = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), count);
+  ASSERT_EQ(mirror(), 5);
 }
 
 }  // end namespace Test
