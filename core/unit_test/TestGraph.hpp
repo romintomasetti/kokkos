@@ -326,21 +326,22 @@ struct HelloWorld
 // This test shows how we can get closer to std::execution from P2300.
 TEST_F(TEST_CATEGORY_FIXTURE(graph), p2300)
 {
+// TODO graph is already a sender, not a scheduler ! no need for root node then
   // This would be our scheduler. It is linked to some execution resource (e.g. a GPU).
-  auto graph = Kokkos::Experimental::create_graph(ex, [](const auto){}); // empty closure to be removed once PR #7248 is merged
+  auto graph = Kokkos::Experimental::create_graph(); // empty closure to be removed once PR #7248 is merged
 
-  // Start the chain of senders/receivers that completes on our scheduler. Somehow similar to 'get_scheduler'.
-  auto root = Kokkos::Experimental::graph::schedule(graph);
+  // // Start the chain of senders/receivers that completes on our scheduler. Somehow similar to 'get_scheduler'.
+  // auto root = Kokkos::Experimental::graph::schedule(graph);
 
   const auto policy = Kokkos::RangePolicy<TEST_EXECSPACE>(0, 1);
 
   // Add nodes.
   const auto node_A1 = Kokkos::Experimental::graph::then(
-      root,
+      graph,
       Kokkos::Experimental::graph::parallel_for("node A1", policy, HelloWorld<view_type>{count})
   );
   const auto node_A2 = Kokkos::Experimental::graph::then(
-      root,
+      graph,
       Kokkos::Experimental::graph::parallel_for("node A2", policy, HelloWorld<view_type>{count})
   );
 
