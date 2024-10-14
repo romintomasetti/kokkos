@@ -506,7 +506,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> sum_view("View");
       sum_view() = Scalar(1);
-      Kokkos::Sum<Scalar> reducer_view(sum_view);
+      Kokkos::Sum reducer_view(sum_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, 0), f,
                               reducer_view);
       Kokkos::fence();
@@ -583,7 +583,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> prod_view("View");
       prod_view() = Scalar(0);
-      Kokkos::Prod<Scalar> reducer_view(prod_view);
+      Kokkos::Prod reducer_view(prod_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, 0), f,
                               reducer_view);
       Kokkos::fence();
@@ -658,7 +658,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> min_view("View");
       min_view() = init;
-      Kokkos::Min<Scalar> reducer_view(min_view);
+      Kokkos::Min reducer_view(min_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, N), f,
                               reducer_view);
       Kokkos::fence();
@@ -709,7 +709,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> max_view("View");
       max_view() = init;
-      Kokkos::Max<Scalar> reducer_view(max_view);
+      Kokkos::Max reducer_view(max_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, N), f,
                               reducer_view);
       Kokkos::fence();
@@ -1396,7 +1396,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> band_view("View");
       band_view() = init;
-      Kokkos::BAnd<Scalar> reducer_view(band_view);
+      Kokkos::BAnd reducer_view(band_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, N), f,
                               reducer_view);
       Kokkos::fence();
@@ -1446,7 +1446,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> bor_view("View");
       bor_view() = init;
-      Kokkos::BOr<Scalar> reducer_view(bor_view);
+      Kokkos::BOr reducer_view(bor_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, N), f,
                               reducer_view);
       Kokkos::fence();
@@ -1496,7 +1496,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> land_view("View");
       land_view() = init;
-      Kokkos::LAnd<Scalar> reducer_view(land_view);
+      Kokkos::LAnd reducer_view(land_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, N), f,
                               reducer_view);
       Kokkos::fence();
@@ -1546,7 +1546,7 @@ struct TestReducers {
     {
       Kokkos::View<Scalar, Kokkos::HostSpace> lor_view("View");
       lor_view() = init;
-      Kokkos::LOr<Scalar> reducer_view(lor_view);
+      Kokkos::LOr reducer_view(lor_view);
       Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpace>(0, N), f,
                               reducer_view);
       Kokkos::fence();

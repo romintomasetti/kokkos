@@ -30,27 +30,171 @@ static_assert(false,
 
 namespace Kokkos {
 
-template <class Scalar, class Space>
+namespace Impl {
+//! Type of the reduction target.
+enum class ReductionTargetType {
+  SCALAR,
+  VIEW
+};
+
+//! This class wraps the reduction target.
+template <class ViewType, ReductionTargetType TargetType>
+struct ReductionTarget;
+
+//! Specialization for a scalar.
+template <class ViewType>
+struct ReductionTarget<ViewType, ReductionTargetType::SCALAR>
+{
+  using value_type = typename ViewType::value_type;
+  using view_type = ViewType;
+
+  static constexpr ReductionTargetType type = ReductionTargetType::SCALAR;
+
+  KOKKOS_FUNCTION
+  ReductionTarget(typename ViewType::value_type& value) : data(&value) {}
+
+  ViewType data;
+};
+
+//! Specialization for a view.
+template <class ViewType>
+struct ReductionTarget<ViewType, ReductionTargetType::VIEW>
+{
+  using value_type = typename ViewType::value_type;
+  using view_type = ViewType;
+
+  static constexpr ReductionTargetType type = ReductionTargetType::VIEW;
+
+  /**
+   * Support for backward compatibility. But to me, this should be deprecated because it's a bad semantic.
+   * Sometimes (even in Kokkos) people do
+   *    int value;
+   *    Kokkos::Sum<int, Kokkos::Cuda>(value);
+   * So it seems such a code wants to target a scalar, but the new semantic we want ends up using the
+   * reduction target type 'VIEW'. It happens usually when the scalar is on device, so we don't want the result
+   * view type to be on host space.
+   * Such a code should probably be changed to:
+   *    int value;
+   *    Kokkos::Sum<int, Kokkos::Cuda>(&value);
+   * so we clearly see that we pass a pointer (and create an unmanaged view around 'value').
+   */
+  KOKKOS_FUNCTION
+  ReductionTarget(value_type& value) : data(&value) {}
+
+  template <typename T>
+  KOKKOS_FUNCTION
+  ReductionTarget(T&& value) : data(std::forward<T>(value)) {}
+
+  ViewType data;
+};
+
+//! Concept for "is a reduction target type".
+template <typename>
+struct is_reduction_target : std::false_type {};
+
+template <typename ViewType, ReductionTargetType TargetType>
+struct is_reduction_target<ReductionTarget<ViewType, TargetType>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_reduction_target_v = is_reduction_target<T>::value;
+
+} // namespace Impl
+
+/// Helper to define the deduction guides for the @c reducer.
+/// Guides must work for:
+///   - a scalar, in which case we reduce on a view whose memory space is @c Kokkos::HostSpace
+///     @note It is probably useless.
+///   - a view
+#define DEDUCTION_GUIDE_FOR_REDUCER(reducer)                                                                         \
+  template <typename Scalar, typename... Properties>                                                                 \
+  KOKKOS_DEDUCTION_GUIDE                                                                                             \
+  reducer(Kokkos::View<Scalar, Properties...> const&)                                                                \
+      -> reducer<Scalar, typename Kokkos::View<Scalar, Properties...>::memory_space>;                                \
+  template <typename Scalar, typename = std::enable_if_t<! Kokkos::is_view_v<Kokkos::Impl::remove_cvref_t<Scalar>>>> \
+  KOKKOS_DEDUCTION_GUIDE reducer(Scalar&)                                                                            \
+      -> reducer<Scalar>;
+
+//! Same, for reducers that define a custom type.
+#define DEDUCTION_GUIDE_FOR_REDUCER_CUSTOM(reducer, custom)                                                          \
+  template <typename Scalar, typename... Properties, typename = std::enable_if_t<! Kokkos::Impl::is_specialization_of<Scalar, custom>::value>> \
+  KOKKOS_DEDUCTION_GUIDE                                                                                             \
+  reducer(Kokkos::View<custom<Scalar>, Properties...> const&)                                                        \
+      -> reducer<Scalar, typename Kokkos::View<custom<Scalar>, Properties...>::memory_space>;                \
+  template <typename Scalar, typename = std::enable_if_t<! Kokkos::is_view_v<Kokkos::Impl::remove_cvref_t<Scalar>>>> \
+  KOKKOS_DEDUCTION_GUIDE reducer(custom<Scalar>&)                                                                    \
+      -> reducer<Scalar>;
+
+/// Specialization for backward compatibility, i.e. people that have hardcoded
+/// @c Kokkos::Sum<int> or @c Kokkos::Sum<int,Kokkos::Cuda> for instance.
+/// This is the user facing (public) API.
+#define BACKWARD_COMPITABILITY_STRUCT(reducer)                           \
+  /* When the target is a scalar. */                                     \
+  template <typename ScalarType>                                         \
+  struct reducer<ScalarType> : public Impl::reducer<                     \
+    Impl::ReductionTarget<Kokkos::View<ScalarType, Kokkos::HostSpace>,   \
+    Impl::ReductionTargetType::SCALAR>> {                                \
+    using base_t = Impl::reducer<                                        \
+      Impl::ReductionTarget<Kokkos::View<ScalarType, Kokkos::HostSpace>, \
+      Impl::ReductionTargetType::SCALAR>>;                               \
+    using base_t::base_t;                                                \
+  };                                                                     \
+  /* When the target is a view. */                                       \
+  template <typename ScalarType, typename Space>                         \
+  struct reducer<ScalarType, Space> : public Impl::reducer<              \
+    Impl::ReductionTarget<Kokkos::View<ScalarType, Space>,               \
+    Impl::ReductionTargetType::VIEW>> {                                  \
+    using base_t = Impl::reducer<                                        \
+      Impl::ReductionTarget<Kokkos::View<ScalarType, Space>,             \
+      Impl::ReductionTargetType::VIEW>>;                                 \
+    using base_t::base_t;                                                \
+  };
+
+#define BACKWARD_COMPITABILITY_STRUCT_CUSTOM(reducer, custom)                    \
+  /* When the target is a scalar. */                                             \
+  template <typename ScalarType>                                                 \
+  struct reducer<ScalarType> : public Impl::reducer<                             \
+    Impl::ReductionTarget<Kokkos::View<custom<ScalarType>, Kokkos::HostSpace>,   \
+    Impl::ReductionTargetType::SCALAR>> {                                        \
+    using base_t = Impl::reducer<                                                \
+      Impl::ReductionTarget<Kokkos::View<custom<ScalarType>, Kokkos::HostSpace>, \
+      Impl::ReductionTargetType::SCALAR>>;                                       \
+    using base_t::base_t;                                                        \
+  };                                                                             \
+  /* When the target is a view. */                                               \
+  template <typename ScalarType, typename Space>                                 \
+  struct reducer<ScalarType, Space> : public Impl::reducer<                      \
+    Impl::ReductionTarget<Kokkos::View<custom<ScalarType>, Space>,               \
+    Impl::ReductionTargetType::VIEW>> {                                          \
+    using base_t = Impl::reducer<                                                \
+      Impl::ReductionTarget<Kokkos::View<custom<ScalarType>, Space>,             \
+      Impl::ReductionTargetType::VIEW>>;                                         \
+    using base_t::base_t;                                                        \
+  };
+
+/// Define the forwarding constructor consistently.
+/// All reducers now forward to the reduction target struct.
+#define REDUCER_CONSTRUCTOR_FORWARD(_reducer_)               \
+  template <typename T, typename = std::enable_if_t<         \
+    !Kokkos::is_reducer_v<Kokkos::Impl::remove_cvref_t<T>>>> \
+  KOKKOS_FUNCTION                                            \
+  _reducer_(T&& target_) : target(std::forward<T>(target_)) {}
+
+namespace Impl {
+template <class TargetType>
 struct Sum {
  public:
   // Required
-  using reducer    = Sum<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = Sum<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  Sum(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  Sum(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(Sum)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -62,40 +206,36 @@ struct Sum {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
-  KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  KOKKOS_FUNCTION
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE Sum(View<Scalar, Properties...> const&)
-    -> Sum<Scalar, typename View<Scalar, Properties...>::memory_space>;
+} // namespace Impl
 
-template <class Scalar, class Space>
+BACKWARD_COMPITABILITY_STRUCT(Sum)
+DEDUCTION_GUIDE_FOR_REDUCER(Sum)
+
+namespace Impl {
+template <class TargetType>
 struct Prod {
  public:
   // Required
-  using reducer    = Prod<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = Prod<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  Prod(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  Prod(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(Prod)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -107,40 +247,35 @@ struct Prod {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE Prod(View<Scalar, Properties...> const&)
-    -> Prod<Scalar, typename View<Scalar, Properties...>::memory_space>;
+BACKWARD_COMPITABILITY_STRUCT(Prod)
+DEDUCTION_GUIDE_FOR_REDUCER(Prod)
 
-template <class Scalar, class Space>
+namespace Impl {
+template <typename TargetType>
 struct Min {
  public:
   // Required
-  using reducer    = Min<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = Min<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  Min(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  Min(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(Min)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -154,40 +289,35 @@ struct Min {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE Min(View<Scalar, Properties...> const&)
-    -> Min<Scalar, typename View<Scalar, Properties...>::memory_space>;
+BACKWARD_COMPITABILITY_STRUCT(Min)
+DEDUCTION_GUIDE_FOR_REDUCER(Min)
 
-template <class Scalar, class Space>
+namespace Impl {
+template <typename TargetType>
 struct Max {
  public:
   // Required
-  using reducer    = Max<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = Max<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  Max(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  Max(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(Max)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -202,40 +332,34 @@ struct Max {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
+BACKWARD_COMPITABILITY_STRUCT(Max)
+DEDUCTION_GUIDE_FOR_REDUCER(Max)
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE Max(View<Scalar, Properties...> const&)
-    -> Max<Scalar, typename View<Scalar, Properties...>::memory_space>;
-
-template <class Scalar, class Space>
+namespace Impl {
+template <class TargetType>
 struct LAnd {
  public:
   // Required
-  using reducer    = LAnd<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = LAnd<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  LAnd(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  LAnd(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(LAnd)
 
   KOKKOS_INLINE_FUNCTION
   void join(value_type& dest, const value_type& src) const {
@@ -248,40 +372,35 @@ struct LAnd {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE LAnd(View<Scalar, Properties...> const&)
-    -> LAnd<Scalar, typename View<Scalar, Properties...>::memory_space>;
+BACKWARD_COMPITABILITY_STRUCT(LAnd)
+DEDUCTION_GUIDE_FOR_REDUCER(LAnd)
 
-template <class Scalar, class Space>
+namespace Impl {
+template <class TargetType>
 struct LOr {
  public:
   // Required
-  using reducer    = LOr<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = LOr<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  LOr(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  LOr(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(LOr)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -295,40 +414,34 @@ struct LOr {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
+BACKWARD_COMPITABILITY_STRUCT(LOr)
+DEDUCTION_GUIDE_FOR_REDUCER(LOr)
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE LOr(View<Scalar, Properties...> const&)
-    -> LOr<Scalar, typename View<Scalar, Properties...>::memory_space>;
-
-template <class Scalar, class Space>
+namespace Impl {
+template <class TargetType>
 struct BAnd {
  public:
   // Required
-  using reducer    = BAnd<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = BAnd<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  BAnd(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  BAnd(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(BAnd)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -342,40 +455,34 @@ struct BAnd {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
+BACKWARD_COMPITABILITY_STRUCT(BAnd)
+DEDUCTION_GUIDE_FOR_REDUCER(BAnd)
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE BAnd(View<Scalar, Properties...> const&)
-    -> BAnd<Scalar, typename View<Scalar, Properties...>::memory_space>;
-
-template <class Scalar, class Space>
+namespace Impl {
+template <class TargetType>
 struct BOr {
  public:
   // Required
-  using reducer    = BOr<Scalar, Space>;
-  using value_type = std::remove_cv_t<Scalar>;
+  using reducer    = BOr<TargetType>;
+  using value_type = std::remove_cv_t<typename TargetType::value_type>;
   static_assert(!std::is_pointer_v<value_type> && !std::is_array_v<value_type>);
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  BOr(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  BOr(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(BOr)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -389,18 +496,18 @@ struct BOr {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE BOr(View<Scalar, Properties...> const&)
-    -> BOr<Scalar, typename View<Scalar, Properties...>::memory_space>;
+BACKWARD_COMPITABILITY_STRUCT(BOr)
+DEDUCTION_GUIDE_FOR_REDUCER(BOr)
 
 template <class Scalar, class Index>
 struct ValLocScalar {
@@ -530,34 +637,32 @@ MaxLoc(View<ValLocScalar<Scalar, Index>, Properties...> const&) -> MaxLoc<
 
 template <class Scalar>
 struct MinMaxScalar {
+  using value_type = Scalar;
   Scalar min_val, max_val;
 };
 
-template <class Scalar, class Space>
+namespace Impl {
+template <class TargetType>
 struct MinMax {
  private:
-  using scalar_type = std::remove_cv_t<Scalar>;
+  using scalar_type = std::remove_cv_t<typename TargetType::value_type::value_type>;
   static_assert(!std::is_pointer_v<scalar_type> &&
                 !std::is_array_v<scalar_type>);
 
  public:
   // Required
-  using reducer    = MinMax<Scalar, Space>;
-  using value_type = MinMaxScalar<scalar_type>;
+  using reducer    = MinMax<TargetType>;
+  using value_type = typename TargetType::value_type;
 
-  using result_view_type = Kokkos::View<value_type, Space>;
+  static_assert(Kokkos::Impl::is_specialization_of<value_type, MinMaxScalar>::value);
+
+  using result_view_type = typename TargetType::view_type;
 
  private:
-  result_view_type value;
-  bool references_scalar_v;
+  TargetType target;
 
  public:
-  KOKKOS_INLINE_FUNCTION
-  MinMax(value_type& value_) : value(&value_), references_scalar_v(true) {}
-
-  KOKKOS_INLINE_FUNCTION
-  MinMax(const result_view_type& value_)
-      : value(value_), references_scalar_v(false) {}
+  REDUCER_CONSTRUCTOR_FORWARD(MinMax)
 
   // Required
   KOKKOS_INLINE_FUNCTION
@@ -577,19 +682,18 @@ struct MinMax {
   }
 
   KOKKOS_INLINE_FUNCTION
-  value_type& reference() const { return *value.data(); }
+  value_type& reference() const { return *target.data.data(); }
 
   KOKKOS_INLINE_FUNCTION
-  result_view_type view() const { return value; }
+  result_view_type view() const { return target.data; }
 
   KOKKOS_INLINE_FUNCTION
-  bool references_scalar() const { return references_scalar_v; }
+  constexpr bool references_scalar() const { return TargetType::type == Impl::ReductionTargetType::SCALAR; }
 };
+}
 
-template <typename Scalar, typename... Properties>
-KOKKOS_DEDUCTION_GUIDE MinMax(View<MinMaxScalar<Scalar>, Properties...> const&)
-    -> MinMax<Scalar,
-              typename View<MinMaxScalar<Scalar>, Properties...>::memory_space>;
+BACKWARD_COMPITABILITY_STRUCT_CUSTOM(MinMax, MinMaxScalar)
+DEDUCTION_GUIDE_FOR_REDUCER_CUSTOM(MinMax, MinMaxScalar)
 
 template <class Scalar, class Index>
 struct MinMaxLocScalar {

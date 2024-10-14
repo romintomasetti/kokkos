@@ -339,15 +339,15 @@ class ParallelScanWithTotal;
 
 }  // namespace Impl
 
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct Sum;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct Prod;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct Min;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct Max;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct MinMax;
 template <class ScalarType, class Index, class Space = HostSpace>
 struct MinLoc;
@@ -355,13 +355,13 @@ template <class ScalarType, class Index, class Space = HostSpace>
 struct MaxLoc;
 template <class ScalarType, class Index, class Space = HostSpace>
 struct MinMaxLoc;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct BAnd;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct BOr;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct LAnd;
-template <class ScalarType, class Space = HostSpace>
+template <class ...>
 struct LOr;
 
 template <class Scalar, class Index, class Space = HostSpace>

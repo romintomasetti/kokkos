@@ -304,7 +304,7 @@ struct TestMDRange_2D {
       value_type sum = 0.0;
       Kokkos::View<value_type, Kokkos::HostSpace> sum_view("sum_view");
       sum_view() = sum;
-      Kokkos::Sum<value_type> reducer_view(sum_view);
+      Kokkos::Sum reducer_view(sum_view);
 
       parallel_reduce(range, functor, reducer_view);
       Kokkos::fence();
@@ -931,7 +931,7 @@ struct TestMDRange_3D {
       value_type sum = 0.0;
       Kokkos::View<value_type, Kokkos::HostSpace> sum_view("sum_view");
       sum_view() = sum;
-      Kokkos::Sum<value_type> reducer_view(sum_view);
+      Kokkos::Sum reducer_view(sum_view);
 
       parallel_reduce(range, functor, reducer_view);
       Kokkos::fence();
@@ -1555,7 +1555,7 @@ struct TestMDRange_4D {
       value_type sum = 0.0;
       Kokkos::View<value_type, Kokkos::HostSpace> sum_view("sum_view");
       sum_view() = sum;
-      Kokkos::Sum<value_type> reducer_view(sum_view);
+      Kokkos::Sum reducer_view(sum_view);
 
       parallel_reduce(range, functor, reducer_view);
       Kokkos::fence();
@@ -2202,7 +2202,7 @@ struct TestMDRange_5D {
       value_type sum = 0.0;
       Kokkos::View<value_type, Kokkos::HostSpace> sum_view("sum_view");
       sum_view() = sum;
-      Kokkos::Sum<value_type> reducer_view(sum_view);
+      Kokkos::Sum reducer_view(sum_view);
 
       parallel_reduce(range, functor, reducer_view);
       Kokkos::fence();
@@ -2854,7 +2854,7 @@ struct TestMDRange_6D {
       value_type sum = 0.0;
       Kokkos::View<value_type, Kokkos::HostSpace> sum_view("sum_view");
       sum_view() = sum;
-      Kokkos::Sum<value_type> reducer_view(sum_view);
+      Kokkos::Sum reducer_view(sum_view);
 
       parallel_reduce(range, functor, reducer_view);
       Kokkos::fence();
