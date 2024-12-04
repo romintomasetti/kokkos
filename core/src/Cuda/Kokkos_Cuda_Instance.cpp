@@ -157,15 +157,27 @@ void cuda_device_synchronize(const std::string &name) {
 
 void cuda_stream_synchronize(const cudaStream_t stream, const CudaInternal *ptr,
                              const std::string &name) {
-  Kokkos::Tools::Experimental::Impl::profile_fence_event<Kokkos::Cuda>(
-      name,
-      Kokkos::Tools::Experimental::Impl::DirectFenceIDHandle{
-          ptr->impl_get_instance_id()},
-      [&]() {
-        KOKKOS_IMPL_CUDA_SAFE_CALL(
-            (ptr->cuda_stream_synchronize_wrapper(stream)));
-      });
+  // if(Kokkos::Tools::fence_event_enabled()) {
+    Kokkos::Tools::Experimental::Impl::profile_fence_event<Kokkos::Cuda>(
+        name,
+        Kokkos::Tools::Experimental::Impl::DirectFenceIDHandle{
+            ptr->impl_get_instance_id()},
+        [&]() {
+          KOKKOS_IMPL_CUDA_SAFE_CALL(
+              (ptr->cuda_stream_synchronize_wrapper(stream)));
+        });
+  // } else {
+  //   ptr->cuda_stream_synchronize_wrapper(stream);
+  // }
 }
+
+// void cuda_stream_synchronize(const cudaStream_t stream, const CudaInternal *ptr) {
+//   if(Kokkos::Tools::fence_event_enabled()) {
+//     cuda_stream_synchronize(stream, ptr, "Kokkos::Cuda::fence(): Unnamed Instance Fence");
+//   } else {
+//     ptr->cuda_stream_synchronize_wrapper(stream);
+//   }
+// }
 
 void cuda_internal_error_throw(cudaError e, const char *name, const char *file,
                                const int line) {
@@ -259,6 +271,7 @@ void CudaInternal::fence(const std::string &name) const {
   Impl::cuda_stream_synchronize(get_stream(), this, name);
 }
 void CudaInternal::fence() const {
+  // Impl::cuda_stream_synchronize(get_stream(), this);
   fence("Kokkos::CudaInternal::fence(): Unnamed Instance Fence");
 }
 
@@ -275,6 +288,8 @@ void CudaInternal::initialize(cudaStream_t stream) {
   KOKKOS_IMPL_CUDA_SAFE_CALL(cudaError_t(cuCtxPushCurrent(context)));
   KOKKOS_IMPL_CUDA_SAFE_CALL(cudaError_t(cuCtxGetDevice(&m_cudaDev)));
   KOKKOS_IMPL_CUDA_SAFE_CALL(cudaSetDevice(m_cudaDev));
+
+  m_cudaDevCount = get_visible_devices().size();
 
   m_stream = stream;
   CudaInternal::cuda_devices.insert(m_cudaDev);
@@ -718,6 +733,10 @@ void Cuda::print_configuration(std::ostream &os, bool /*verbose*/) const {
 void Cuda::impl_static_fence(const std::string &name) {
   Kokkos::Impl::cuda_device_synchronize(name);
 }
+
+// void Cuda::fence() const {
+//   m_space_instance->fence();
+// }
 
 void Cuda::fence(const std::string &name) const {
   m_space_instance->fence(name);

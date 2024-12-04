@@ -89,6 +89,7 @@ class CudaInternal {
   using size_type = Cuda::size_type;
 
   int m_cudaDev = -1;
+  int m_cudaDevCount = -1;
 
   // Device Properties
   static int m_cudaArch;
@@ -182,8 +183,10 @@ class CudaInternal {
   // This function sets device in cudaAPI to device requested at runtime (set in
   // m_cudaDev).
   void set_cuda_device() const {
-    verify_is_initialized("set_cuda_device");
-    KOKKOS_IMPL_CUDA_SAFE_CALL(cudaSetDevice(m_cudaDev));
+    if(m_cudaDevCount != 1) {
+      verify_is_initialized("set_cuda_device");
+      KOKKOS_IMPL_CUDA_SAFE_CALL(cudaSetDevice(m_cudaDev));
+    }
   }
 
   // Return the class stream, optionally setting the device id.

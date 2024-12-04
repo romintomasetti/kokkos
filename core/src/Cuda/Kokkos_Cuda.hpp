@@ -146,7 +146,9 @@ class Cuda {
   /// device have completed.
   static void impl_static_fence(const std::string& name);
 
-  void fence(const std::string& name =
+  // void fence() const;
+  // void fence(const std::string& name) const;
+    void fence(const std::string& name =
                  "Kokkos::Cuda::fence(): Unnamed Instance Fence") const;
 
   /** \brief  Return the maximum amount of concurrency.  */

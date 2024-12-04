@@ -156,6 +156,8 @@ void parseArgs(const std::string&);
 
 Kokkos_Profiling_SpaceHandle make_space_handle(const char* space_name);
 
+bool fence_event_enabled();
+
 namespace Experimental {
 
 namespace Impl {

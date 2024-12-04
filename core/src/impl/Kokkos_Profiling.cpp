@@ -458,6 +458,10 @@ void endDeepCopy() {
 #endif
 }
 
+bool fence_event_enabled() {
+  return Experimental::current_callbacks.begin_fence != nullptr || Experimental::current_callbacks.end_fence != nullptr;
+}
+
 void beginFence(const std::string name, const uint32_t deviceId,
                 uint64_t* handle) {
   Experimental::invoke_kokkosp_callback(
