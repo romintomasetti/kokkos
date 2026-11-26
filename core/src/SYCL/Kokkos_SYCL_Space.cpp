@@ -225,8 +225,10 @@ void sycl_deallocate(const char* arg_label, void* const arg_alloc_ptr,
                                       arg_reported_size);
   }
 
+#if !defined(KOKKOS_ENABLE_IMPL_ASYNC)
   SYCL::impl_static_fence(
       "Kokkos::Impl::sycl_deallocate: fence before deallocate");
+#endif
   sycl::free(arg_alloc_ptr, queue);
 }
 

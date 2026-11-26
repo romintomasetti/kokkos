@@ -53,6 +53,10 @@ class HostSpace {
 
   HostSpace() = default;
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_deallocate() noexcept { return false; }
+#endif
+
   /**\brief  Allocate untracked memory in the space */
   template <typename ExecutionSpace>
   void* allocate(const ExecutionSpace&, const size_t arg_alloc_size) const {

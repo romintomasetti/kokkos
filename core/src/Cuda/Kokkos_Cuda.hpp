@@ -117,6 +117,10 @@ class Cuda {
   /** \brief  Return the maximum amount of concurrency.  */
   int concurrency() const;
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return true; }
+#endif
+
   //! Print configuration information to the given output stream.
   void print_configuration(std::ostream& os, bool verbose = false) const;
 

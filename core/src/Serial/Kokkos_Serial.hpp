@@ -183,6 +183,10 @@ class Serial {
     return impl_thread_pool_size(0);
   }
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return false; }
+#endif
+
   uint32_t impl_instance_id() const noexcept { return 1; }
 
   static const char* name();

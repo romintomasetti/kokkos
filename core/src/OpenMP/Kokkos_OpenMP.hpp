@@ -70,6 +70,10 @@ class OpenMP {
 
   OpenMP();
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return false; }
+#endif
+
   explicit OpenMP(int pool_size);
 
   /// \brief Print configuration information to the given output stream.

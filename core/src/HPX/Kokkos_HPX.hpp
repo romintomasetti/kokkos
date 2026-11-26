@@ -108,6 +108,10 @@ class HPX {
  public:
   static constexpr uint32_t impl_default_instance_id() { return 1; }
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return true; }
+#endif
+
  private:
   static bool m_hpx_initialized;
   static std::atomic<uint32_t> m_next_instance_id;

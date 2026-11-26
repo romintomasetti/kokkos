@@ -34,6 +34,10 @@ class SYCLDeviceUSMSpace {
   using size_type       = Impl::SYCLInternal::size_type;
   using index_type      = Impl::SYCLInternal::index_type;
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_deallocate() noexcept { return true; }
+#endif
+
   SYCLDeviceUSMSpace();
   explicit SYCLDeviceUSMSpace(sycl::queue queue);
 
@@ -70,6 +74,10 @@ class SYCLSharedUSMSpace {
   using device_type     = Kokkos::Device<execution_space, memory_space>;
   using size_type       = Impl::SYCLInternal::size_type;
   using index_type      = Impl::SYCLInternal::index_type;
+
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_deallocate() noexcept { return true; }
+#endif
 
   SYCLSharedUSMSpace();
   explicit SYCLSharedUSMSpace(sycl::queue queue);
@@ -122,6 +130,10 @@ class SYCLHostUSMSpace {
   using device_type     = Kokkos::Device<execution_space, memory_space>;
   using size_type       = Impl::SYCLInternal::size_type;
   using index_type      = Impl::SYCLInternal::index_type;
+
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_deallocate() noexcept { return true; }
+#endif
 
   SYCLHostUSMSpace();
   explicit SYCLHostUSMSpace(sycl::queue queue);

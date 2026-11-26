@@ -60,6 +60,10 @@ class SYCL {
 
   sycl::queue& sycl_queue() const noexcept { return m_space_instance->m_queue; }
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return true; }
+#endif
+
   //@}
   //------------------------------------
   //! \name Functions that all Kokkos devices must implement.

@@ -54,6 +54,10 @@ class HIP {
   //! \name Functions that all Kokkos devices must implement.
   //@{
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return true; }
+#endif
+
   /** \brief Wait until all dispatched functors complete.
    *
    * The parallel_for or parallel_reduce dispatch of a functor may return

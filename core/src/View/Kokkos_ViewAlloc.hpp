@@ -112,10 +112,33 @@ struct ViewValueFunctor {
     if (Kokkos::Profiling::profileLibraryLoaded()) {
       Kokkos::Profiling::endParallelFor(kpID);
     }
-    if (default_exec_space || std::is_same_v<Tag, DestroyTag>) {
+
+    // Unconditionally fence if no execution space argument was provided to the
+    // view construction.
+    if (default_exec_space) {
       space.fence(std::is_same_v<Tag, DestroyTag>
                       ? "Kokkos::View::destruction before deallocate"
                       : "Kokkos::View::initialization");
+      return;
+    }
+
+    if constexpr (std::is_same_v<Tag, DestroyTag>) {
+#if !defined(KOKKOS_ENABLE_IMPL_ASYNC)
+      // Unconditionally fence before deallocating.
+      space.fence("Kokkos::View::destruction before deallocate");
+#else
+      // For backends that support launching asynchronous parallel regions, but
+      // do not support asynchronous deallocation, fence as well.
+      constexpr bool supports_async_dispatch =
+          ExecSpace::supports_async_dispatch();
+      constexpr bool supports_async_deallocate =
+          ExecSpace::memory_space::supports_async_deallocate();
+      if constexpr (supports_async_dispatch && !supports_async_deallocate) {
+        space.fence(
+            "Kokkos::View::destruction before deallocation (does not support "
+            "async deallocation)");
+      }
+#endif
     }
   }
 

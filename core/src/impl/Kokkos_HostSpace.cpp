@@ -83,16 +83,20 @@ void HostSpace::deallocate(void *const arg_alloc_ptr,
 
 void HostSpace::deallocate(const char *arg_label, void *const arg_alloc_ptr,
                            const size_t arg_alloc_size) const {
+#if !defined(KOKKOS_ENABLE_IMPL_ASYNC)
   if (arg_alloc_ptr)
     Kokkos::fence("Kokkos::HostSpace::impl_deallocate before free");
+#endif
   impl_deallocate(arg_label, arg_alloc_ptr, arg_alloc_size);
 }
 
 void HostSpace::deallocate(const char *arg_label, void *const arg_alloc_ptr,
                            const size_t arg_alloc_size,
                            const size_t arg_logical_size) const {
+#if !defined(KOKKOS_ENABLE_IMPL_ASYNC)
   if (arg_alloc_ptr)
     Kokkos::fence("Kokkos::HostSpace::impl_deallocate before free");
+#endif
   impl_deallocate(arg_label, arg_alloc_ptr, arg_alloc_size, arg_logical_size);
 }
 

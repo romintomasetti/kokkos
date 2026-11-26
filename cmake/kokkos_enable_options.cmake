@@ -22,6 +22,9 @@ endfunction()
 kokkos_cfg_depends(OPTIONS DEVICES)
 kokkos_cfg_depends(OPTIONS COMPILER_ID)
 
+# Reducing the amount of synchronization induced by Kokkos requires better programming patterns on the user side.
+kokkos_enable_option(IMPL_ASYNC OFF "Reduce synchronizations")
+
 # Put a check in just in case people are using this option
 kokkos_deprecated_list(OPTIONS ENABLE)
 

@@ -62,6 +62,10 @@ class Threads {
   /// device have completed.
   static void impl_static_fence(const std::string& name);
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_dispatch() noexcept { return false; }
+#endif
+
   void fence(const std::string& name =
                  "Kokkos::Threads::fence: Unnamed Instance Fence") const;
 

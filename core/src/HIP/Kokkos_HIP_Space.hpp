@@ -84,6 +84,16 @@ class HIPSpace {
   void* allocate(const char* arg_label, const size_t arg_alloc_size,
                  const size_t arg_logical_size) const;
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_deallocate() noexcept {
+#if defined(KOKKOS_ENABLE_IMPL_HIP_MALLOC_ASYNC)
+    return true;
+#else
+    return false;
+#endif
+  }
+#endif
+
   /**\brief  Deallocate untracked memory in the hip space */
   void deallocate(void* const arg_alloc_ptr, const size_t arg_alloc_size) const;
   void deallocate(const char* arg_label, void* const arg_alloc_ptr,

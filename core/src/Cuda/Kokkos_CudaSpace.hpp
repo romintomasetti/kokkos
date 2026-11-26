@@ -90,6 +90,16 @@ class CudaSpace {
   }
 #endif
 
+#if defined(KOKKOS_ENABLE_IMPL_ASYNC)
+  static constexpr bool supports_async_deallocate() noexcept {
+#if defined(KOKKOS_ENABLE_IMPL_CUDA_MALLOC_ASYNC)
+    return true;
+#else
+    return false;
+#endif
+  }
+#endif
+
   /**\brief  Deallocate untracked memory in the cuda space */
   void deallocate(void* const arg_alloc_ptr, const size_t arg_alloc_size) const;
   void deallocate(const char* arg_label, void* const arg_alloc_ptr,
